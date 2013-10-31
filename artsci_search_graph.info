@@ -1,0 +1,8 @@
+name = ArtSci Search Graph
+description = Visual search using MoreLikeThis search engine feature
+dependencies[] = search_api
+
+package = ArtSci
+core = 7.x
+files[] = artsci_search_graph.module
+

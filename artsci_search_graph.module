@@ -1,0 +1,61 @@
+<?php
+
+/**
+ *  Implements hook_menu().
+ */
+function artsci_search_graph_menu() {
+  return array(
+    'graph' => array(
+      'page callback' => 'artsci_search_graph_page',
+      'access arguments' => array('access content'),
+    ),
+  );
+}
+
+/**
+ *  Page callback for graph.
+ */
+function artsci_search_graph_page() {
+  drupal_add_js('http://d3js.org/d3.v3.min.js', 'external');
+
+  $q = db_select('file_managed', 'fm')
+    ->fields('fm', array('fid'))
+    ->execute();
+
+  // First, gather all files as nodes.
+  $nodeIndices = array();
+  while ($r = $q->fetchAssoc()) {
+    $nodes[] = array('fid' => $r['fid']);
+    $nodeIndices[$r['fid']] = count($nodes) - 1;
+  }
+
+  // Use MLT engine to establish links between them.
+  $indexes = search_api_index_load_multiple(FALSE, array('item_type' => 'file'));
+  $index = array_shift($indexes);
+  //dpm($index, 'search api file index');
+  $server = search_api_index_get_server($index);
+  $connection = $server->getSolrConnection();
+  $links = array();
+  foreach ($nodes as $i => $node) {
+    $mlt = $connection->makeServletRequest('mlt',
+      array(
+        'q' =>  'item_id:' . $node['fid'],
+        'mlt.fl' => 'tm_search_api_aggregation_1',
+        'mlt.interestingTerms' => 'list',
+        /*'mlt.mintf' => 1,
+        'mlt.mindf' => 1,*/
+        //'mlt.boost' => 'true',
+      )
+    );
+    //dpm($mlt, 'mlt for fid ' . $node['fid']);
+    foreach ($mlt->response->docs as $similar) {
+      $links[] = array('source' => $i, 'target' => $nodeIndices[$similar->is_fid]);
+    }
+  }
+
+  drupal_add_js('artsciMltGraph = ' . json_encode(array('nodes' => $nodes, 'links' => $links)) . ';', 'inline');
+  drupal_add_js(drupal_get_path('module', 'artsci_search_graph') . '/artsci_search_graph.js', 'file');
+
+  return '<div id="artsci-mlt-graph"></div>';
+}
+
